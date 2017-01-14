@@ -145,7 +145,7 @@ class OC_Form extends Kohana_Form {
     public static function redirect($url = NULL)
     {        
         if ($url == NULL)
-            $url = Core::post('auth_redirect',URL::current());
+            $url = Core::request('auth_redirect',URL::current());
         
         if (Request::current()->controller()=='auth')
             $url = Request::current()->referrer();
@@ -187,7 +187,7 @@ class OC_Form extends Kohana_Form {
     public static function form_tag($name, $options, $value = NULL)
     {
         if ($options['display'] != 'hidden')
-            $label = FORM::label($name, (isset($options['label']))?$options['label']:$name, array('class'=>'control-label col-md-5', 'for'=>$name));
+            $label = FORM::label($name, (isset($options['label']))?$options['label']:$name, array('class'=>'control-label', 'for'=>$name));
         else
             $label = '';
 
@@ -214,13 +214,25 @@ class OC_Form extends Kohana_Form {
             case 'hidden':
                 $input = FORM::hidden($name, $value, $attributes);
                 break;
+            case 'logo':
+                $input = FORM::file($name, $attributes);
+                if (!empty($value))
+				{
+                    $input.= HTML::image($value, array('class' => 'img-responsive thumbnail'));
+					$input.= Form::button('delete_'.$name, __('Delete'), array('type' => 'submit', 'value' => $value));
+				}
+                break;
+            case 'color':
+            	$attributes['class'] = 'color {hash:true, required:false}';
+                $input = FORM::input($name, $value, $attributes);
+                break;
             case 'text':
             default:
                 $input = FORM::input($name, $value, $attributes);
                 break;
         }
 
-        $out = $label.'<div class="col-md-5">'.$input.'</div>';
+        $out = $label.$input;
 
         return $out;
 

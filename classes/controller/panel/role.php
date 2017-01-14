@@ -1,16 +1,33 @@
 <?php 
 
-class Controller_Panel_Role extends Auth_Crud {
+class Controller_Panel_Role extends Auth_CrudAjax {
 
-	/**
-	 * @var $_index_fields ORM fields shown in index
-	 */
-	protected $_index_fields = array('id_role','name');
+    /**
+     * @var $_index_fields ORM fields shown in index
+     */
+    protected $_index_fields = array('id_role','name');
 
-	/**
-	 * @var $_orm_model ORM model name
-	 */
-	protected $_orm_model = 'role';
+    /**
+     * @var $_orm_model ORM model name
+     */
+    protected $_orm_model = 'role';
+
+    protected $_search_fields = array('name');
+
+    public $crud_actions = array('update','create');
+
+    function __construct(Request $request, Response $response)
+    {
+        parent::__construct($request, $response);
+        $this->_buttons_actions = array(
+                                        array( 'url'   => Route::url('oc-panel', array('controller'=>'user')).'?filter__id_role=' ,
+                                                'title' => __('Users'),
+                                                'class' => '',
+                                                'icon'  => 'fa fa-fw fa-users'
+                                                ),
+
+                                        );
+    }
 
 	/**
      * CRUD controller: UPDATE
@@ -18,6 +35,13 @@ class Controller_Panel_Role extends Auth_Crud {
     public function action_update()
     {
         $id_role = $this->request->param('id');
+
+        //we do not allow modify the admin
+        if ($id_role == Model_Role::ROLE_ADMIN)
+        {
+            Alert::set(Alert::WARNING, __('Admin Role can not be modified!'));
+            $this->redirect(Route::url('oc-panel',array('controller'=>'role')));
+        }
 
         $this->template->title = __('Update').' '.__($this->_orm_model).' '.$id_role;
     

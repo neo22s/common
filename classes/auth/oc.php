@@ -74,6 +74,33 @@ class Auth_OC extends Kohana_Auth {
 	}
 
 
+    /**
+     * returns a user if email and password matches
+     *
+     * @param   string   email
+     * @param   string   password
+     * @param   boolean  enable autologin
+     * @return  mixed / Model_User
+     */
+    public function email_login($email, $password)
+    {
+        // Load the user
+        $user = new Model_User;
+        $user->where('email', '=', $email)
+            ->where('status','in',array(Model_User::STATUS_ACTIVE,Model_User::STATUS_SPAM))
+            ->limit(1)
+            ->find();
+
+        // If the passwords match, perform a login
+        if ($user->password === $this->hash($password))
+        {
+            return $user;
+        }
+
+        // Login failed
+        return FALSE;
+    }
+
 	/**
 	 * Logs a user in.
 	 *
@@ -84,15 +111,8 @@ class Auth_OC extends Kohana_Auth {
 	 */
 	protected function _login($email, $password, $remember)
 	{
-		// Load the user
-		$user = new Model_User;
-		$user->where('email', '=', $email)
-    		->where('status','in',array(Model_User::STATUS_ACTIVE,Model_User::STATUS_SPAM))
-    		->limit(1)
-    		->find();
-		//echo $user->password;		d($this->hash($password));
 		// If the passwords match, perform a login
-		if ($user->password === $this->hash($password))
+		if ( ($user = $this->email_login($email, $password)) !== FALSE)
 		{
 			// Complete the login with the found data
 			$user->complete_login(($remember)?$this->_config['lifetime']:NULL);
@@ -161,6 +181,32 @@ class Auth_OC extends Kohana_Auth {
 
 
     /**
+     * Logs a user in, based on the authautologin cookie, or seted param token
+     * @param string $token
+     * @return  mixed
+     */
+    public function api_login($token = NULL)
+    {
+        if ($token!==NULL)
+        {
+            // Load the user from the token
+            $user = new Model_User;
+            $user ->where('api_token', '=', $token)
+            ->where('status','in',array(Model_User::STATUS_ACTIVE,Model_User::STATUS_SPAM))
+            ->limit(1)
+            ->find();
+
+            if ($user->loaded())
+            {
+                return $user;
+            }
+        }
+
+        return FALSE;
+    }
+
+
+    /**
      * Logs a user in using social auth
      * @param string $token
      * @return  mixed
@@ -206,7 +252,8 @@ class Auth_OC extends Kohana_Auth {
 	{
 		// Set by force_login()
 		$this->_session->delete('auth_forced');
-
+        Cookie::delete('google_authenticator');
+        
 		if ($token = Cookie::get('authautologin'))
 		{
 			// Delete the autologin cookie to prevent re-login
@@ -348,6 +395,27 @@ class Auth_OC extends Kohana_Auth {
             }
             else if ($this->auto_login($token)!==FALSE)
             {
+                //reset failed attempts if he used a correct QL.
+                $user = Auth::instance()->get_user();
+                if ($user->failed_attempts > 0)
+                {
+                    $user->failed_attempts  = 0;
+                    $user->last_failed      = NULL;
+                    try 
+                    {
+                        // Save the user
+                        $user->update();
+                    }
+                    catch (ORM_Validation_Exception $e)
+                    {
+                        throw HTTP_Exception::factory(500,$e->errors(''));
+                    }
+                    catch(Exception $e)
+                    {
+                        throw HTTP_Exception::factory(500,$e->getMessage());
+                    }
+                }
+
                 return $url;//loged in!!!
             }
 		}
@@ -361,7 +429,7 @@ class Auth_OC extends Kohana_Auth {
      */
     public function login_redirect()
     {
-        HTTP::redirect(Core::post('auth_redirect',Route::url('oc-panel')));
+        HTTP::redirect(Core::request('auth_redirect',Route::url('oc-panel')));
     }
 
 

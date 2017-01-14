@@ -181,12 +181,12 @@ class Model_Forum extends ORM {
                 ->select(array(DB::select(DB::expr('COUNT("id_post")'))
                         ->from(array('posts','p'))
                         ->where('p.id_post_parent','IS', NULL)
-                        ->where('p.id_forum','=',DB::expr(core::config('database.default.table_prefix').'f.id_forum'))
+                        ->where('p.id_forum','=',DB::expr(Database::instance('default')->table_prefix().'f.id_forum'))
                         ->where('p.status','=',Model_Post::STATUS_ACTIVE)
                         ->group_by('id_forum'), 'count'))
                 ->select(array(DB::select('created')
                         ->from(array('posts','p'))
-                        ->where('p.id_forum','=',DB::expr(core::config('database.default.table_prefix').'f.id_forum'))
+                        ->where('p.id_forum','=',DB::expr(Database::instance('default')->table_prefix().'f.id_forum'))
                         ->where('p.status','=',Model_Post::STATUS_ACTIVE)
                         ->order_by('created','desc')
                         ->limit(1), 'last_message'))
@@ -316,5 +316,156 @@ class Model_Forum extends ORM {
         return (is_numeric($id_parent))? $id_parent:0;
     }
 
+    /**
+     * Deletes a single record while ignoring relationships.
+     *
+     * @chainable
+     * @throws Kohana_Exception
+     * @return ORM
+     */
+    public function delete()
+    {
+        if ( ! $this->_loaded)
+            throw new Kohana_Exception('Cannot delete :model model because it is not loaded.', array(':model' => $this->_object_name));
+       
+
+        //update all the siblings this forum has and set the forum parent
+        DB::update('forums')
+                        ->set(array('id_forum_parent' => $this->id_forum_parent))
+                        ->where('id_forum_parent','=',$this->id_forum)
+                        ->execute();
+        
+        //delete posts for that forum
+        DB::delete('posts')->where('id_forum', '=',$this->id_forum)->execute();
+        
+        
+        parent::delete();
+    }
+
+    protected $_table_columns =  
+array (
+  'id_forum' => 
+  array (
+    'type' => 'int',
+    'min' => '0',
+    'max' => '4294967295',
+    'column_name' => 'id_forum',
+    'column_default' => NULL,
+    'data_type' => 'int unsigned',
+    'is_nullable' => false,
+    'ordinal_position' => 1,
+    'display' => '10',
+    'comment' => '',
+    'extra' => 'auto_increment',
+    'key' => 'PRI',
+    'privileges' => 'select,insert,update,references',
+  ),
+  'name' => 
+  array (
+    'type' => 'string',
+    'column_name' => 'name',
+    'column_default' => NULL,
+    'data_type' => 'varchar',
+    'is_nullable' => false,
+    'ordinal_position' => 2,
+    'character_maximum_length' => '145',
+    'collation_name' => 'utf8_general_ci',
+    'comment' => '',
+    'extra' => '',
+    'key' => '',
+    'privileges' => 'select,insert,update,references',
+  ),
+  'order' => 
+  array (
+    'type' => 'int',
+    'min' => '0',
+    'max' => '4294967295',
+    'column_name' => 'order',
+    'column_default' => '0',
+    'data_type' => 'int unsigned',
+    'is_nullable' => false,
+    'ordinal_position' => 3,
+    'display' => '2',
+    'comment' => '',
+    'extra' => '',
+    'key' => '',
+    'privileges' => 'select,insert,update,references',
+  ),
+  'created' => 
+  array (
+    'type' => 'string',
+    'column_name' => 'created',
+    'column_default' => 'CURRENT_TIMESTAMP',
+    'data_type' => 'timestamp',
+    'is_nullable' => false,
+    'ordinal_position' => 4,
+    'comment' => '',
+    'extra' => 'on update CURRENT_TIMESTAMP',
+    'key' => '',
+    'privileges' => 'select,insert,update,references',
+  ),
+  'id_forum_parent' => 
+  array (
+    'type' => 'int',
+    'min' => '0',
+    'max' => '4294967295',
+    'column_name' => 'id_forum_parent',
+    'column_default' => '0',
+    'data_type' => 'int unsigned',
+    'is_nullable' => false,
+    'ordinal_position' => 5,
+    'display' => '10',
+    'comment' => '',
+    'extra' => '',
+    'key' => '',
+    'privileges' => 'select,insert,update,references',
+  ),
+  'parent_deep' => 
+  array (
+    'type' => 'int',
+    'min' => '0',
+    'max' => '4294967295',
+    'column_name' => 'parent_deep',
+    'column_default' => '0',
+    'data_type' => 'int unsigned',
+    'is_nullable' => false,
+    'ordinal_position' => 6,
+    'display' => '2',
+    'comment' => '',
+    'extra' => '',
+    'key' => '',
+    'privileges' => 'select,insert,update,references',
+  ),
+  'seoname' => 
+  array (
+    'type' => 'string',
+    'column_name' => 'seoname',
+    'column_default' => NULL,
+    'data_type' => 'varchar',
+    'is_nullable' => false,
+    'ordinal_position' => 7,
+    'character_maximum_length' => '145',
+    'collation_name' => 'utf8_general_ci',
+    'comment' => '',
+    'extra' => '',
+    'key' => 'UNI',
+    'privileges' => 'select,insert,update,references',
+  ),
+  'description' => 
+  array (
+    'type' => 'string',
+    'column_name' => 'description',
+    'column_default' => NULL,
+    'data_type' => 'varchar',
+    'is_nullable' => true,
+    'ordinal_position' => 8,
+    'character_maximum_length' => '255',
+    'collation_name' => 'utf8_general_ci',
+    'comment' => '',
+    'extra' => '',
+    'key' => '',
+    'privileges' => 'select,insert,update,references',
+  ),
+);
 
 } // END Model_Category

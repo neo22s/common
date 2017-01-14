@@ -11,7 +11,7 @@
 
     <title>An error :'(</title>
 
-    <link href="//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css" rel="stylesheet">
+    <link href="//cdn.jsdelivr.net/bootstrap/3.3.6/css/bootstrap.min.css" rel="stylesheet">
 
   </head>
 
@@ -57,10 +57,10 @@
       <div class="jumbotron">
         
         <?if (Auth::instance()->get_user()):?>
-        <?if (Auth::instance()->get_user()->id_role == Model_Role::ROLE_ADMIN):?>
-            <p>Since you are loged in as admin only you can see this message:</p>
+        <?if (Auth::instance()->get_user()->is_admin()):?>
+            <p>Since you are logged in as admin only you can see this message:</p>
             <code><?=$message?></code>
-            <p>It's been loged in Panel->Tools->Logs for more information regarding this error.</p>
+            <p>It's been logged in Panel->Tools->Logs for more information regarding this error.</p>
         <?endif?>
         <?endif?>
 

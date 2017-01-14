@@ -21,6 +21,13 @@ class Controller_Panel_Theme extends Auth_Controller {
      */
     public function action_options()
     {
+        //clear skin and theme cookie
+        if (Core::config('appearance.allow_query_theme')=='1') 
+        {
+            Cookie::set('skin_'.Theme::$theme, '', Core::config('auth.lifetime'));
+            Cookie::set('theme', '', Core::config('auth.lifetime'));
+        }
+        
         $options = NULL;
         $data    = NULL;
 
@@ -41,11 +48,44 @@ class Controller_Panel_Theme extends Auth_Controller {
         // validation active 
         //$this->template->scripts['footer'][]= '/js/oc-panel/settings.js';
         Breadcrumbs::add(Breadcrumb::factory()->set_title(__('Theme Options')));     
-        $this->template->title = __('Theme Options');  
+        $this->template->title = __('Theme Options');
+
+        $this->template->scripts['footer'][] = 'js/jscolor/jscolor.js';
 
         // save only changed values
         if($this->request->post())
         {
+           
+            //delete image
+            foreach ($_POST as $key => $value) 
+            {
+                if (strpos($key,'delete_')!==FALSE)
+                {
+                    if ($options[$keyname = str_replace('delete_','',$key)]['display'] == 'logo')
+                    {
+                        $url = Theme::delete_image(Core::post($key));
+                    
+                        if ($url!==FALSE)
+                            $data[$keyname] = $url;
+                    }
+                }
+            }
+            
+            //for each file option upload
+            foreach ($_FILES as $key=>$values) 
+            {
+                if ($options[$key]['display'] == 'logo')
+                {
+                    $url = Theme::upload_image($_FILES[$key], ($key=='favicon_url')?TRUE:FALSE);
+                    //succesfully uploaded
+                    if ($url!==FALSE)
+                    {
+                        $data[$key] = $url;
+                        //get rid of previous image if any
+                        Theme::delete_image(Theme::get($key));
+                    }
+                }
+            }
 
             //for each option read the post and store it
             foreach ($_POST as $key => $value) 
@@ -56,7 +96,7 @@ class Controller_Panel_Theme extends Auth_Controller {
                     if ($options[$key]['display'] == 'textarea')
                         $data[$key] = Kohana::$_POST_ORIG[$key];
                     else
-                        $data[$key] = core::post($key);
+                        $data[$key] = core::post($key);                    
                 }
             }
             
@@ -69,6 +109,7 @@ class Controller_Panel_Theme extends Auth_Controller {
         $this->template->content = View::factory('oc-panel/pages/themes/options', array('options' => $options, 'data'=>$data));
     }
 
+
     /**
      * theme selector
      * @return [view] 
@@ -80,8 +121,7 @@ class Controller_Panel_Theme extends Auth_Controller {
         Breadcrumbs::add(Breadcrumb::factory()->set_title(__('Themes')));  
         $this->template->title = __('Themes');     
         
-        $market_url = (Kohana::$environment!== Kohana::DEVELOPMENT)? 'market.'.Core::DOMAIN.'':'eshop.lo';
-        $this->template->scripts['footer'][] = 'http://'.$market_url.'/embed.js';
+        $this->template->scripts['footer'][] = 'js/oc-panel/license.js';
 
         //getting the themes
         $themes = Theme::get_installed_themes();
@@ -111,7 +151,7 @@ class Controller_Panel_Theme extends Auth_Controller {
             $opt = Theme::get_options($theme);
             Theme::load($theme,FALSE);
 
-            if (isset($opt['premium']) AND Theme::get('license')===NULL)
+            if (isset($opt['premium']) AND Core::config('license.number') == NULL)
             {
                  $this->redirect(Route::url('oc-panel',array('controller'=>'theme','action'=> 'license','id'=>$theme) ));
             }
@@ -144,7 +184,7 @@ class Controller_Panel_Theme extends Auth_Controller {
      */
     public function action_license()
     {
-        $theme = $this->request->param('id');
+        $theme = $this->request->param('id',Theme::$theme);
 
         // save only changed values
         if(core::request('license'))
@@ -157,15 +197,11 @@ class Controller_Panel_Theme extends Auth_Controller {
                 else
                     Theme::set_theme($theme);
 
-                Theme::$options = Theme::get_options($theme);       
-                Theme::load($theme);
-
-                Theme::$data['license']      = core::request('license');
-                Theme::$data['license_date'] = time()+7*24*60*60;
-                Theme::save($theme);
+                Model_Config::set_value('license','number',core::request('license'));
+                Model_Config::set_value('license','date',time()+7*24*60*60);
 
                 Alert::set(Alert::SUCCESS, __('Theme activated, thanks.'));
-                $this->redirect(Route::url('oc-panel',array('controller'=>'theme','action'=> 'options')));
+                $this->redirect(Route::url('oc-panel',array('controller'=>'theme','action'=> 'index')));
             }
             else
             {
@@ -175,6 +211,7 @@ class Controller_Panel_Theme extends Auth_Controller {
 
         Breadcrumbs::add(Breadcrumb::factory()->set_title(__('Theme License')));  
         $this->template->title = __('Theme License');     
+        $this->template->scripts['footer'][] = 'js/oc-panel/license.js';
 
         $this->template->content = View::factory('oc-panel/pages/themes/license', array('theme' => Theme::$theme));
     }
@@ -186,8 +223,7 @@ class Controller_Panel_Theme extends Auth_Controller {
     public function action_install_theme()
     {
         $zip_theme = $_FILES['theme_file']; //file post
-        
-        if (!Upload::type($zip_theme, array('zip'))) //check if it si of a right type
+        if ($zip_theme['name']=='' OR !Upload::type($zip_theme, array('zip'))) //check if it si of a right type
         {
             Alert::set(Alert::ALERT, $zip_theme['name'].' '.__('Is not valid format, please use ZIP format'));
             $this->redirect(Route::url('oc-panel',array('controller'=>'theme', 'action'=>'index')));
@@ -220,7 +256,7 @@ class Controller_Panel_Theme extends Auth_Controller {
                 //check license from the zip name
                 //$license = substr($zip_theme['name'],0, -4);
 
-                Alert::set(Alert::SUCCESS, $zip_theme['name'].' '.__('You have succesfully installed the theme!'));
+                Alert::set(Alert::SUCCESS, $zip_theme['name'].' '.__('You have successfully installed the theme!'));
                 $this->redirect(Route::url('oc-panel',array('controller'=>'theme', 'action'=>'index')));
             }
             
@@ -266,5 +302,54 @@ class Controller_Panel_Theme extends Auth_Controller {
         Alert::set(Alert::ALERT, __('Theme could not be downloaded'));
         $this->redirect(Route::url('oc-panel',array('controller'=>'theme', 'action'=>'index')));
     }
+
+    /**
+     * custom css for default theme
+     * @return [view] 
+     */
+    public function action_css()
+    {
+        // validation active 
+        //$this->template->scripts['footer'][]= '/js/oc-panel/settings.js';
+        $this->template->title = __('Custom CSS');
+        Breadcrumbs::add(Breadcrumb::factory()->set_title($this->template->title));  
+
+        $css_active  = Core::post('css_active',Core::Config('appearance.custom_css'));
+        $css_content = Core::curl_get_contents(Theme::get_custom_css());
+        if ($css_content===NULL)
+            Alert::set(Alert::ERROR, sprintf(__('We can not read file %s'),Theme::get_custom_css() ));
+
+        // change the CSS
+        if( ($new_css = Core::post('css'))!==NULL )
+        {            
+            //save css file
+            $file = Theme::theme_folder('default').'/css/web-custom.css';
+            if (File::write($file,$new_css))
+            {
+                Core::S3_upload($file,'css/web-custom.css');
+
+                //active or not? switch
+                $css_active = Core::post('css_active');
+                Model_Config::set_value('appearance','custom_css',$css_active);
+
+                //increase version number
+                Model_Config::set_value('appearance','custom_css_version',Core::Config('appearance.custom_css_version')+1);
+
+                $css_content = $new_css;
+
+                Alert::set(Alert::SUCCESS, __('CSS file saved'));
+            }
+            else
+                Alert::set(Alert::ERROR, __('CSS file not saved'));
+            
+        }
+
+        $this->template->content = View::factory('oc-panel/pages/themes/css', array('css_content' => $css_content,
+                                                                                    'css_version' => Core::Config('appearance.custom_css_version'),
+                                                                                    'css_active'  => $css_active
+                                                                                    ));
+    }
+
+
 
 }//end of controller

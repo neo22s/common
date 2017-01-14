@@ -89,10 +89,48 @@ class Menu {
         $new_menus =  array();
 
         //using order they send us
-        foreach ($order as $key) 
-            $new_menus[$key] = $menus[$key];
+        foreach ($order as $key)
+        {
+            if (isset($menus[$key]))
+                $new_menus[$key] = $menus[$key];
+        } 
+            
        
         return self::save($new_menus);
+    }
+
+    /**
+     * get values for a menu item
+     * @param  string $name 
+     * @return array/bool    
+     */
+    public static function get_item($name)
+    {
+        $menus = self::get();
+        
+		return $menus[$name];
+    }
+
+    /**
+     * menus have this items
+     * 
+     * [0] => array('title'=>'name',
+     *               'URL'=>URL,  
+     *               'target'=>blank,
+     *               'icon'=>'icon',
+     *                 )
+     */
+    public static function update($name, $title, $url, $target = '', $icon=NULL)
+    {
+        $menus = self::get();
+        //d($menus);
+        $menus[$name] = array(   'title' => $title,
+                            'url'       => $url,
+                            'target'    => $target,
+                            'icon'     => $icon,
+                        );
+        return self::save($menus);
+
     }
 
 }

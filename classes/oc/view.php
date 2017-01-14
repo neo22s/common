@@ -49,13 +49,13 @@ class OC_View extends Kohana_View{
 
     
     /**
-     * gets the fragment name, unique using i18n theme and skin and cat and loc
+     * gets the fragment name, unique using i18n theme and URL
      * @param  string $name 
      * @return string       
      */
     public static function fragment_name($name)
     {
-        return 'fragment_'.$name.'_'.i18n::lang().'_'.Theme::$theme;
+        return 'fragment_'.$name.'_'.i18n::lang().'_'.Theme::$theme.'_'.URL::title(URL::current());
     }
 
 
@@ -74,7 +74,7 @@ class OC_View extends Kohana_View{
         $path = Kohana::find_file(Theme::views_path(), $file);
 
         //if file does not exists on this theme and theme has a parent (its a child theme)
-        if ($path === FALSE AND Theme::$parent_theme!==NULL)
+        if ($path === FALSE AND isset(Theme::$parent_theme) AND Theme::$parent_theme!==NULL)
             $path = Kohana::find_file(Theme::views_parent_path(), $file);
     
         //in case view not found try to read from default theme

@@ -4,6 +4,9 @@ class Controller_Blog extends Controller {
 
     public function __construct($request, $response)
     {
+        if (core::config('general.blog') != 1)
+            $this->redirect(Route::url('default'));
+
         parent::__construct($request, $response);
         Breadcrumbs::add(Breadcrumb::factory()->set_title(__('Home'))->set_url(Route::url('default')));
         Breadcrumbs::add(Breadcrumb::factory()->set_title(__('Blog'))->set_url(Route::url('blog')));
@@ -20,10 +23,15 @@ class Controller_Blog extends Controller {
 
 	    //template header
 	    $this->template->title            = __('Blog');
-	    $this->template->meta_description = __('Blog');
+	    $this->template->meta_description = core::config('general.site_name').' '.__('blog section.');
 	    
 	    $posts = new Model_Post();
         $posts->where('status','=', Model_Post::STATUS_ACTIVE)->where('id_forum','IS',NULL);
+
+        if ( ($search=Core::get('search'))!==NULL AND strlen(Core::get('search'))>=3 )
+        $posts->where_open()
+             ->where('title','like','%'.$search.'%')->or_where('description','like','%'.$search.'%')
+             ->where_close();
 
         $res_count = clone $posts;
         $res_count = $res_count->count_all();
@@ -73,8 +81,13 @@ class Controller_Blog extends Controller {
     {
         
         $post = new Model_Post();
-        $post->where('status','=',Model_Post::STATUS_ACTIVE)
-            ->where('seotitle','=',$seotitle)
+        
+        // if visitor or user with ROLE_USER display post with STATUS_ACTIVE
+        if (! Auth::instance()->logged_in() OR 
+            (Auth::instance()->logged_in() AND Auth::instance()->get_user()->id_role == Model_Role::ROLE_USER))
+            $post->where('status','=',Model_Post::STATUS_ACTIVE);
+        
+        $post->where('seotitle','=',$seotitle)
             ->where('id_forum','IS',NULL)
             ->cached()->limit(1)->find();
 

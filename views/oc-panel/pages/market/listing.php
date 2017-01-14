@@ -4,13 +4,13 @@
 <?$i=0;
 foreach ($market as $item):?>
     <?if ($i%3==0):?><div class="clearfix"></div><?endif?>
-    <div class="col-md-4 col-sm-4">
+    <div class="col-md-4 col-sm-4 theme">
     <div class="thumbnail <?if ( $item['price_offer']>0 AND strtotime($item['offer_valid'])>time()):?>alert-success<?endif?>" >
 
         <?if (empty($item['url_screenshot'])===FALSE):?>
             <img  class="thumb_market" src="<?=$item['url_screenshot']?>">
         <?else:?>
-             <img class="thumb_market" src="http://www.placehold.it/300x200&text=<?=$item['title']?>">
+             <img class="thumb_market" src="//www.placehold.it/300x200&text=<?=$item['title']?>">
         <?endif?>   
         
         <div class="caption">
@@ -43,13 +43,6 @@ foreach ($market as $item):?>
                 <a class="btn btn-primary oe_button" data-toggle="modal" data-target="#marketModal" href="<?=$item['url_buy']?>">
                     <i class="glyphicon  glyphicon-shopping-cart"></i>  <?=__('Buy Now')?>
                 </a>
-                <?if (strtolower($item['type'])=='themes' AND $item['title']!='Pack of themes'):?>
-                <a class="btn btn-warning" href="http://open-classifieds.com/hosting/">
-                    <i class="glyphicon  glyphicon-shopping-cart"></i>  Hosted $3.49/M
-                </a>
-                <?endif?>
-                
-                
             </p>
         </div>
     </div>
@@ -58,10 +51,10 @@ foreach ($market as $item):?>
     endforeach?>
 <?endif?>
 
-    <div class="col-md-4 col-sm-4">
+    <div class="col-md-4 col-sm-4 theme">
     <div class="thumbnail" >
 
-        <img  class="thumb_market" src="http://open-classifieds.com/files/market/custom.png">
+        <img  class="thumb_market" src="https://open-classifieds.com/files/market/custom.png">
        
         
         <div class="caption">
@@ -76,7 +69,7 @@ foreach ($market as $item):?>
             </p>
             
             <p>
-                <a class="btn btn-primary"  href="http://open-classifieds.com/customization/">
+                <a class="btn btn-primary"  href="https://yclas.com/contact.html">
                     <i class="glyphicon  glyphicon-shopping-cart"></i>  Get a quote!
                 </a>                
             </p>

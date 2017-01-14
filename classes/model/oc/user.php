@@ -64,8 +64,13 @@ class Model_OC_User extends ORM {
     {
         return array(
                         'id_user'       => array(array('numeric')),
-                        'name'          => array(array('max_length', array(':value', 145))),
-                        'email'         => array(array('not_empty'), array('max_length', array(':value', 145)), ),
+                        'name'          => array(array('not_empty'), array('max_length', array(':value', 145)), ),
+                        'email'         => array(
+                                                    array('not_empty'),
+                                                    array('email'),
+                                                    array(array($this, 'unique'), array('email', ':value')),
+                                                    array('max_length', array(':value', 145))
+                                        ),
                         'password'      => array(array('not_empty'), array('max_length', array(':value', 64)), ),
                         'status'        => array(array('numeric')),
                         'id_role'       => array(array('numeric')),
@@ -76,9 +81,13 @@ class Model_OC_User extends ORM {
                         'last_login'    => array(),
                         'last_ip'       => array(),
                         'user_agent'    => array(),
+                        'description'   => array(),
                         'token'         => array(array('max_length', array(':value', 40))),
                         'token_created' => array(),
                         'token_expires' => array(),
+                        'has_images'    => array(array('numeric')),
+                        'last_failed'   => array(),
+                        'failed_attempts'   => array(),
                     );
     }
     
@@ -100,8 +109,10 @@ class Model_OC_User extends ORM {
                         'id_role'       => __('Role'),
                         'id_location'   => __('Location'),
                         'created'       => __('Created'),
+                        'description'   => __('Description'),
                         'last_modified' => __('Last modified'),
                         'last_login'    => __('Last login'),
+                        'has_image'     => __('Has image'),
                     );
     }
 
@@ -329,22 +340,24 @@ class Model_OC_User extends ORM {
      * @param  string $email
      * @return bool
      */
-    public function is_spam($email = NULL)
+    public static function is_spam($email = NULL)
     {
-        
-        if($email != NULL)
-        {
-            $user = new self();
-            $user = $user->where('email', '=', $email)
-                     ->limit(1)
-                     ->find();
 
-            if($user->loaded() AND $user->status == self::STATUS_SPAM)
-                return TRUE;
-        }
-        else
+        //if he is login we can check if its an spammer
+        if ( Auth::instance()->logged_in() === TRUE ) 
         {
-            if($this->status == self::STATUS_SPAM)
+            if (Auth::instance()->get_user()->status == Model_User::STATUS_SPAM)
+                return TRUE;
+        } 
+        //not loged in so only way to see it is after he posted with his email   
+        elseif(Valid::email($email))
+        {
+            $spammer = new Model_User();
+            $spammer->where('email','=',$email)
+                    ->where('status','=',Model_User::STATUS_SPAM)
+                    ->find();
+
+            if ($spammer->loaded())
                 return TRUE;
         }
 
@@ -369,9 +382,7 @@ class Model_OC_User extends ORM {
 
         if($user->loaded())
         {
-
-            if($user->id_role != Model_Role::ROLE_ADMIN AND 
-                $user->id_role != Model_Role::ROLE_MODERATOR)
+            if ( ! $user->is_admin() AND ! $user->is_moderator() AND ! $user->is_translator())
             {
                 $user->status = self::STATUS_SPAM;
 
@@ -379,7 +390,7 @@ class Model_OC_User extends ORM {
                     $user->save();
                     Alert::set(Alert::ALERT, $user->email.' '.__('has been disable for posting, due to recent spam content!'));
                 } catch (Exception $e) {
-                    
+                    Kohana::$log->add(Log::ERROR, 'Error: ' . $e->getMessage());
                 }
             }
         }
@@ -400,7 +411,7 @@ class Model_OC_User extends ORM {
                 $this->create_token();
 
             $ql = Auth::instance()->ql_encode($this->token,Route::url($route,$params,'http'));
-            return Route::url('oc-panel',array('controller' => 'auth', 'action' => 'ql', 'id' =>$ql),'http');
+            return Route::url('oc-panel',array('controller' => 'auth', 'action' => 'ql', 'id' =>$ql));
         }
         return NULL;               
     }
@@ -419,29 +430,40 @@ class Model_OC_User extends ORM {
 
     public function exclude_fields()
     {
-       return array('logins','last_login','hybridauth_provider_uid','password','last_modified','created','salt', 'ip_created', 'last_ip','token','token_created','token_expires','user_agent','id_location','seoname');
+        $exclude_fields = array('logins','last_login','hybridauth_provider_uid','last_modified','created','salt', 'ip_created', 'last_ip','token','token_created','token_expires','user_agent','id_location','seoname','has_image','failed_attempts','last_failed');
+        
+        if (Request::current()->action() == 'update')
+            array_push($exclude_fields, 'password');
+        
+        return $exclude_fields;
     }
 
     /**
      * return the title formatted for the URL
      *
-     * @param  string $title
+     * @param  string $seoname
      * 
      */
-    public function gen_seo_title($title)
+    public function gen_seo_title($seoname)
     {
         //in case seoname is really small or null
-        if (strlen($title)<3)
-            $title = $this->name;
+        if (strlen($seoname)<3)
+        {   
+            if (Valid::email($this->email))
+                $seoname = substr($this->email, 0, strpos($this->email, '@'));
+            elseif (strlen($this->name)>=3)
+                $seoname = $this->name;
+            else
+                $seoname = __('user').'-'.$seoname;
+        }
 
-        $seotitle = URL::title($title);
-        
+        $seoname = URL::title($seoname);
 
-        if ($seotitle != $this->seoname)
+        if ($seoname != $this->seoname)
         {
             $user = new self;
             //find a user same seotitle
-            $s = $user->where('seoname', '=', $seotitle)->where('id_user', '!=', $this->id_user)->limit(1)->find();
+            $s = $user->where('seoname', '=', $seoname)->where('id_user', '!=', $this->id_user)->limit(1)->find();
 
             //found, increment the last digit of the seotitle
             if ($s->loaded())
@@ -450,61 +472,99 @@ class Model_OC_User extends ORM {
                 $loop = TRUE;
                 while($loop)
                 {
-                    $attempt = $seotitle.'-'.$cont;
+                    $attempt = $seoname.'-'.$cont;
                     $user = new self;
                     unset($s);
                     $s = $user->where('seoname', '=', $attempt)->where('id_user', '!=', $this->id_user)->limit(1)->find();
                     if(!$s->loaded())
                     {
                         $loop = FALSE;
-                        $seotitle = $attempt;
+                        $seoname = $attempt;
                     }
                     else
-                  {
+                    {
                         $cont++;
                     }
                 }
             }
         }
         
-        return $seotitle;
+        return $seoname;
+    }
+
+    /**
+     * creates a user from email if exists doesn't, sends welcome email
+     * @param  string $email 
+     * @param  string $name  
+     * @param  string $password
+     * @return Model_User        
+     */
+    public static function create_email($email,$name=NULL,$password=NULL)
+    {
+        $user = new self();
+        $user->where('email','=',$email)->limit(1)->find();
+
+        //only if didnt exists
+        if (!$user->loaded())
+        {
+            if ($password === NULL)
+                $password  = Text::random('alnum', 8);
+
+            $user = self::create_user($email,$name,$password);
+
+            $url = $user->ql('oc-panel',array('controller' => 'profile', 
+                                                      'action'     => 'edit'),TRUE);
+
+            $user->email('auth-register',array('[USER.PWD]'=>$password,
+                                                        '[URL.QL]'=>$url)
+                                                );
+        }
+
+        return $user;
     }
 
     /**
      * creates a user from email if exists doesn't...
      * @param  string $email 
      * @param  string $name  
+     * @param  string $password
      * @return Model_User        
      */
-    public static function create_email($email,$name=NULL)
+    public static function create_user($email,$name=NULL,$password=NULL)
     {
         $user = new self();
         $user->where('email','=',$email)->limit(1)->find();
 
         if (!$user->loaded())
         {
-            $password           = Text::random('alnum', 8);
+            if ($password === NULL)
+                $password       = Text::random('alnum', 8);
+
             $user->email        = $email;
-            $user->name         = $name;
+            $user->name         = ($name===NULL OR !isset($name) OR empty($name))? substr($email, 0, strpos($email, '@')):$name;
+            $user->name         = UTF8::substr($user->name, 0, 145);
             $user->status       = self::STATUS_ACTIVE;
             $user->id_role      = Model_Role::ROLE_USER;;
             $user->seoname      = $user->gen_seo_title($user->name);
             $user->password     = $password;
+            $user->subscriber   = 1;
+
             try
             {
                 $user->save();
-                //send welcome email
-                $url = $user->ql('oc-panel',array('controller' => 'profile', 
-                                                  'action'     => 'edit'),NULL,TRUE);
-
-                $user->email('auth-register',array('[USER.PWD]'=>$password,
-                                                    '[URL.QL]'=>$url)
-                                            );
             }
             catch (ORM_Validation_Exception $e)
             {
+                throw HTTP_Exception::factory(500,$e->errors(''));
+            }
+            catch (Exception $e)
+            {
                 throw HTTP_Exception::factory(500,$e->getMessage());
             }
+
+            //add to elasticemail
+            if ( Core::config('email.elastic_listname')!='' )
+                ElasticEmail::subscribe(Core::config('email.elastic_listname'),$user->email,$user->name);
         }
 
         return $user;
@@ -544,13 +604,244 @@ class Model_OC_User extends ORM {
      */
     public function get_profile_image()
     {
-
-        if(is_file(DOCROOT."images/users/".$this->id_user.".png"))
-            $imgurl = URL::base().'images/users/'.$this->id_user.'.png';
+        if ($this->has_image) {
+            if(core::config('image.aws_s3_active'))
+            {
+                $protocol = Core::is_HTTPS() ? 'https://' : 'http://';
+                $version = $this->last_modified ? '?v='.Date::mysql2unix($this->last_modified) : NULL;
+                
+                return $protocol.core::config('image.aws_s3_domain').'images/users/'.$this->id_user.'.png'.$version;
+            }
+            else
+                return URL::base().'images/users/'.$this->id_user.'.png'
+                        .(($this->last_modified) ? '?v='.Date::mysql2unix($this->last_modified) : NULL);
+        }
         else
-            $imgurl = 'http://www.gravatar.com/avatar/'.md5(strtolower(trim($this->email))).'?s=200';
+            return '//www.gravatar.com/avatar/'.md5(strtolower(trim($this->email))).'?s=250';
+    }
 
-        return $imgurl;
+    /**
+     * deletes the image of the user
+     * @return boolean 
+     */
+    public function delete_image()
+    {
+        if ( ! $this->_loaded)
+            throw new Kohana_Exception('Cannot delete :model model because it is not loaded.', array(':model' => $this->_object_name));
+
+        if(core::config('image.aws_s3_active'))
+        {
+            require_once Kohana::find_file('vendor', 'amazon-s3-php-class/S3','php');
+            $s3 = new S3(core::config('image.aws_access_key'), core::config('image.aws_secret_key'));
+        }
+
+        $root = DOCROOT.'images/users/'; //root folder
+        
+        if (!is_dir($root)) 
+            return FALSE;
+        else
+        {   
+            //delete photo
+            @unlink($root.$this->id_user.'.png');
+    
+            // delete photo from Amazon S3
+            if(core::config('image.aws_s3_active'))
+                $s3->deleteObject(core::config('image.aws_s3_bucket'), 'images/users/'.$this->id_user.'.png');
+    
+            // update user info
+            $this->has_image = 0;
+            $this->last_modified = Date::unix2mysql();
+            $this->save();
+        }
+
+        return TRUE;
+
+    }
+
+    /**
+     * upload an image to the user
+     * @param  file $image 
+     * @return bool/message        
+     */
+    public function upload_image($image)
+    {
+        if (!$this->loaded())
+            return FALSE;
+
+        if(core::config('image.aws_s3_active'))
+        {
+            require_once Kohana::find_file('vendor', 'amazon-s3-php-class/S3','php');
+            $s3 = new S3(core::config('image.aws_access_key'), core::config('image.aws_secret_key'));
+        }
+                
+        if ( 
+            ! Upload::valid($image) OR
+            ! Upload::not_empty($image) OR
+            ! Upload::type($image, explode(',',core::config('image.allowed_formats'))) OR
+            ! Upload::size($image, core::config('image.max_image_size').'M'))
+        {
+            if ( Upload::not_empty($image) && ! Upload::type($image, explode(',',core::config('image.allowed_formats'))))
+            {
+                return $image['name'].' '.sprintf(__('Is not valid format, please use one of this formats "%s"'),core::config('image.allowed_formats'));
+            } 
+            if( ! Upload::size($image, core::config('image.max_image_size').'M'))
+            {
+                return $image['name'].' '.sprintf(__('Is not of valid size. Size is limited to %s MB per image'),core::config('image.max_image_size'));
+            }
+            return $image['name'].' '.__('Image is not valid. Please try again.');
+        }
+        else
+        {
+            if($image != NULL) // sanity check 
+            {
+                // saving/uploading zip file to dir.
+                $path = 'images/users/'; //root folder
+                $root = DOCROOT.$path; //root folder
+                $image_name = $this->id_user.'.png';
+                $width = core::config('image.width'); // @TODO dynamic !?
+                $height = core::config('image.height');// @TODO dynamic !?
+                $image_quality = core::config('image.quality');
+                
+                // if folder does not exist, try to make it
+                if ( ! file_exists($root) AND ! @mkdir($root, 0775, true)) { // mkdir not successful ?
+                    return __('Image folder is missing and cannot be created with mkdir. Please correct to be able to upload images.');
+                };
+
+                // save file to root folder, file, name, dir
+                if($file = Upload::save($image, $image_name, $root))
+                {
+                    // resize uploaded image 
+                    Image::factory($file)
+                        ->orientate()
+                        ->resize($width, $height, Image::AUTO)
+                        ->save($root.$image_name,$image_quality);
+                    
+                    // put image to Amazon S3
+                    if(core::config('image.aws_s3_active'))
+                        $s3->putObject($s3->inputFile($file), core::config('image.aws_s3_bucket'), $path.$image_name, S3::ACL_PUBLIC_READ);
+                    
+                    // update user info
+                    $this->has_image = 1;
+                    $this->last_modified = Date::unix2mysql();
+                    try {
+                        $this->save();
+                        return TRUE;
+                    } catch (Exception $e) {
+                        return $e->getMessage();
+                    }                       
+                }
+                else
+                    return $image['name'].' '.__('Icon file could not been saved.');
+            }
+            
+        }
+    }
+
+    /**
+     * gets the api_token and regenerates if needed
+     * @param  boolean $regenerate forces regenerate
+     * @return string              
+     */
+    public function api_token($regenerate = FALSE)
+    {
+        if($this->loaded())
+        {   
+            //first time force the token generation
+            if ($this->api_token==NULL)
+                $regenerate = TRUE;
+
+            if ($regenerate === TRUE)
+            {
+                //we assure the token is unique
+                do
+                {
+                    $this->api_token = sha1(uniqid(Text::random('alnum', 32), TRUE));
+                }
+                while(ORM::factory('user', array('api_token' => $this->api_token))->limit(1)->loaded() AND $this->api_token!= Core::config('general.api_key'));
+
+                try
+                {
+                    $this->update();
+                }
+                catch(Exception $e)
+                {
+                    throw HTTP_Exception::factory(500,$e->getMessage());
+                }
+            }
+
+            return $this->api_token;
+        }
+
+        return FALSE;
+    }
+
+    /**
+     * sends a push notification to this user if has a device
+     * @param  string $message 
+     * @param  array $data extra info to send   
+     * @return bool          
+     */
+    public function push_notification($message,$data = NULL)
+    {
+        if ($this->loaded() and isset($this->device_id) )
+        {
+            return Core::push_notification($this->device_id,$message,$data);
+        }
+
+        return FALSE;        
+    }
+
+    /**
+     * get a google_authenticator QR code to be scanned-
+     * @return string
+     */
+    public function google_authenticator_qr()
+    {
+        if ($this->google_authenticator!='')
+        {
+            require Kohana::find_file('vendor', 'GoogleAuthenticator');
+
+            $ga = new PHPGangsta_GoogleAuthenticator();
+            return $ga->getQRCodeGoogleUrl(core::config('general.site_name'), $this->google_authenticator);
+        }
+
+        return FALSE;
+    }
+
+    /**
+     * Check if the user is Admin.
+     * @return  boolean
+     */
+    public function is_admin()
+    {
+        if ($this->loaded() AND $this->id_role==Model_Role::ROLE_ADMIN)
+            return TRUE;
+
+        return FALSE;
+    }
+
+    /**
+     * Check if the user is Moderator.
+     * @return  boolean
+     */
+    public function is_moderator()
+    {
+        if ($this->loaded() AND $this->id_role==Model_Role::ROLE_MODERATOR)
+            return TRUE;
+
+        return FALSE;
+    }
+
+    /**
+     * Check if the user is Translator.
+     * @return  boolean
+     */
+    public function is_translator()
+    {
+        if ($this->loaded() AND $this->id_role==Model_Role::ROLE_TRANSLATOR)
+            return TRUE;
+
+        return FALSE;
     }
 
 } // END Model_User

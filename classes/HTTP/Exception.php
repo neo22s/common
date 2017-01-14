@@ -21,11 +21,12 @@ class HTTP_Exception extends Kohana_HTTP_Exception {
         }
         else
         {
-            // Lets log the Exception, Just in case it's important!
-            Kohana_Exception::log($this);
+            //not saving 404 as error
+            if ($this->getCode()!=404)
+                Kohana::$log->add(Log::ERROR, parent::text($this));
 
             // Generate a nicer looking "Oops" page.
-            $view = View::factory('pages/error/default', array('message'=>$e->getMessage()) );
+            $view = View::factory('pages/error/default', array('message'=>$this->getMessage()) );
  
             $response = Response::factory()
                 ->status($this->getCode())

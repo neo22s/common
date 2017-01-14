@@ -1,39 +1,70 @@
 <?php defined('SYSPATH') or die('No direct script access.');?>
 
+<ul class="nav nav-tabs nav-tabs-simple">
+    <li <?=(Request::current()->action()=='optimize') ? 'class="active"' : NULL?>>
+        <a href="<?=Route::url('oc-panel',array('controller'=>'tools','action'=>'optimize'))?>" 
+            title="<?=HTML::chars(__('Optimize'))?>" 
+            class="ajax-load">
+            <?=__('Optimize')?>
+        </a>
+    </li>
+    <li <?=(Request::current()->action()=='sitemap') ? 'class="active"' : NULL?>>
+        <a href="<?=Route::url('oc-panel',array('controller'=>'tools','action'=>'sitemap'))?>" 
+            title="<?=HTML::chars(__('Sitemap'))?>" 
+            class="ajax-load">
+            <?=__('Sitemap')?>
+        </a>
+    </li>
+    <li <?=(Request::current()->action()=='migration') ? 'class="active"' : NULL?>>
+        <a href="<?=Route::url('oc-panel',array('controller'=>'tools','action'=>'migration'))?>" 
+            title="<?=HTML::chars(__('Migration'))?>" 
+            class="ajax-load">
+            <?=__('Migration')?>
+        </a>
+    </li>
+    <li <?=(Request::current()->action()=='cache') ? 'class="active"' : NULL?>>
+        <a href="<?=Route::url('oc-panel',array('controller'=>'tools','action'=>'cache'))?>" 
+            title="<?=HTML::chars(__('Cache'))?>" 
+            class="ajax-load">
+            <?=__('Cache')?>
+        </a>
+    </li>
+    <li <?=(Request::current()->action()=='logs') ? 'class="active"' : NULL?>>
+        <a href="<?=Route::url('oc-panel',array('controller'=>'tools','action'=>'logs'))?>" 
+            title="<?=HTML::chars(__('Logs'))?>" 
+            class="ajax-load">
+            <?=__('Logs')?>
+        </a>
+    </li>
+    <li <?=(Request::current()->action()=='phpinfo') ? 'class="active"' : NULL?>>
+        <a href="<?=Route::url('oc-panel',array('controller'=>'tools','action'=>'phpinfo'))?>" 
+            title="<?=HTML::chars(__('PHP Info'))?>" 
+            class="ajax-load">
+            <?=__('PHP Info')?>
+        </a>
+    </li>
+</ul>
 
-	<div class="page-header">
-		<h1><?=__('Sitemap')?></h1>
-    <p><?=__('Last time generated')?> <?=Date::unix2mysql(Sitemap::last_generated_time())?></p>
-    <p><?=__('Next sitemap')?> <?=Date::unix2mysql(Sitemap::last_generated_time()+core::config('sitemap.expires'))?></p>
-    <a class="btn btn-primary pull-right" href="<?=Route::url('oc-panel',array('controller'=>'tools','action'=>'sitemap'))?>?force=1">
-      <?=__('Generate')?></a>
-	</div>
-
-	<form class="well form-horizontal"  method="post" action="<?=Route::url('oc-panel',array('controller'=>'tools','action'=>'sitemap'))?>">         
-      
-      <?=Form::errors()?>        
-
-      <div class="form-group">
-        <label class="control-label col-sm-2"><?=__("Expiry time")?>:</label>
-        <div class="col-sm-4">
-        <input  type="text" name="expires" value="<?=core::config('sitemap.expires')?>" class="col-md-2"  /> Seconds
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="control-label col-sm-2"><?=__("Update on publish")?>:</label>
-          <div class="col-sm-4"> 
-            <? $input = array("1"=>"TRUE","0"=>"FALSE");?>
-              <?= FORM::select('on_post', $input, core::config('sitemap.on_post'), array(
-              'placeholder' => 'on_post' ,
-              'class' => 'col-md-2', 
-              'id' => 'on_post', 
-              ))?>
-          </div>
-      </div>
-      
-      <div class="form-actions">
-      	<a href="<?=Route::url('oc-panel')?>" class="btn btn-default"><?=__('Cancel')?></a>
-        <button type="submit" class="btn btn-primary"><?=__('Save')?></button>
-      </div>
-	</form>    
+<div class="panel panel-default">
+    <div class="panel-body">
+        <ul class="list-inline pull-right">
+            <li>
+                <a class="btn btn-primary ajax-load" title="<?=__('Sitemap')?>" href="<?=Route::url('oc-panel',array('controller'=>'tools','action'=>'sitemap'))?>?force=1">
+                    <?=__('Generate')?>
+                </a>
+            </li>
+        </ul>
+        <h1 class="page-header page-title">
+            <?=__('Sitemap')?>
+            <a target="_blank" href="https://docs.yclas.com/sitemap-classifieds-website/">
+                <i class="fa fa-question-circle"></i>
+            </a>
+        </h1>
+        <hr>
+        <ul class="list-unstyled">
+            <li><?=__('Last time generated')?> <?=Date::unix2mysql(Sitemap::last_generated_time())?></li>
+            <li><?=__('Your sitemap XML to submit to engines')?></li>
+            <li><input type="text" value="<?=core::config('general.base_url')?><?=(file_exists(DOCROOT.'sitemap-index.xml'))? 'sitemap-index.xml':'sitemap.xml.gz'?>" /></li>
+        </ul>
+    </div>
+</div>

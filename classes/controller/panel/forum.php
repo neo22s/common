@@ -73,7 +73,7 @@ class Controller_Panel_Forum extends Auth_Crud {
                 }
                 $order++;
             }
-
+            Core::delete_cache();
 
             $this->template->content = __('Saved');
         }
@@ -115,6 +115,7 @@ class Controller_Panel_Forum extends Auth_Crud {
             
             try {
                 $forum->save();
+                Core::delete_cache();
                 Alert::set(Alert::SUCCESS, __('Forum is created.'));
             } catch (Exception $e) {
                 Alert::set(Alert::ERROR, $e->getMessage());
@@ -129,7 +130,7 @@ class Controller_Panel_Forum extends Auth_Crud {
      */
     public function action_update()
     {
-        Breadcrumbs::add(Breadcrumb::factory()->set_title(__('Edit new forum')));
+        Breadcrumbs::add(Breadcrumb::factory()->set_title(__('Edit forum')));
 
         $forum = new Model_Forum($this->request->param('id'));
 
@@ -154,6 +155,7 @@ class Controller_Panel_Forum extends Auth_Crud {
             
             try {
                 $forum->update();
+                Core::delete_cache();
                 Alert::set(Alert::SUCCESS, __('Forum is updated.'));
                 HTTP::redirect(Route::url('oc-panel',array('controller'  => 'forum','action'=>'index')));  
             } catch (Exception $e) {
@@ -179,22 +181,11 @@ class Controller_Panel_Forum extends Auth_Crud {
         //update the elements related to that ad
         if ($forum->loaded())
         {
-            //update all the siblings this forum has and set the forum parent
-            $query = DB::update('forums')
-                        ->set(array('id_forum_parent' => $forum->id_forum_parent))
-                        ->where('id_forum_parent','=',$forum->id_forum)
-                        ->execute();
-
-            //update all the posts this forum has and set the forum parent
-            $query = DB::update('posts')
-                        ->set(array('id_forum' => $forum->id_forum_parent))
-                        ->where('id_forum','=',$forum->id_forum)
-                        ->execute();
-
             try
             {
                 $forum->delete();
                 $this->template->content = 'OK';
+                Core::delete_cache();
                 Alert::set(Alert::SUCCESS, __('Forum deleted'));
                 
             }
@@ -204,7 +195,7 @@ class Controller_Panel_Forum extends Auth_Crud {
             }
         }
         else
-             Alert::set(Alert::SUCCESS, __('Forum not deleted'));
+             Alert::set(Alert::ERROR, __('Forum not deleted'));
 
         
         HTTP::redirect(Route::url('oc-panel',array('controller'  => 'forum','action'=>'index')));  

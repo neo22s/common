@@ -53,7 +53,7 @@ class Model_Content extends ORM {
         {
             $cat = new self;
             //find a user same seotitle
-            $s = $cat->where('seotitle', '=', $seotitle)->limit(1)->find();
+            $s = $cat->where('seotitle', '=', $seotitle)->where('locale', '=', $this->locale)->limit(1)->find();
 
             //found, increment the last digit of the seotitle
             if ($s->loaded())
@@ -94,20 +94,29 @@ class Model_Content extends ORM {
         $seotitle = str_replace('.', '-', $seotitle);
 
         $content = new self();
+        
+        // if visitor or user with ROLE_USER display content with STATUS_ACTIVE
+        if (! Auth::instance()->logged_in() OR 
+            (Auth::instance()->logged_in() AND Auth::instance()->get_user()->id_role == Model_Role::ROLE_USER))
+            $content->where('status','=', 1);
+
         $content = $content->where('seotitle','=', $seotitle)
                  ->where('locale','=', i18n::$locale)
                  ->where('type','=', $type)
-                 ->where('status','=', 1)
                  ->limit(1)->cached()->find();
 
         //was not found try first translation in english
         if (!$content->loaded())
         {
 
+            // if visitor or user with ROLE_USER display content with STATUS_ACTIVE
+            if (! Auth::instance()->logged_in() OR 
+                (Auth::instance()->logged_in() AND Auth::instance()->get_user()->id_role == Model_Role::ROLE_USER))
+                $content->where('status','=', 1);
+                
             $content = $content->where('seotitle','=', $seotitle)
-                 ->where('locale','=', 'en_UK')
+                 ->where('locale','=', i18n::$locale_default)
                  ->where('type','=', $type)
-                 ->where('status','=', 1)
                  ->limit(1)->cached()->find();
         }
         
@@ -115,10 +124,13 @@ class Model_Content extends ORM {
         if (!$content->loaded())
         {
 
+            // if visitor or user with ROLE_USER display content with STATUS_ACTIVE
+            if (! Auth::instance()->logged_in() OR 
+                (Auth::instance()->logged_in() AND Auth::instance()->get_user()->id_role == Model_Role::ROLE_USER))
+                $content->where('status','=', 1);
+                
             $content = $content->where('seotitle','=', $seotitle)
-                 //->where('locale','=', 'en_UK')
                  ->where('type','=', $type)
-                 ->where('status','=', 1)
                  ->limit(1)->cached()->find();
         }
 
@@ -134,15 +146,17 @@ class Model_Content extends ORM {
     public static function text($seotitle, $replace = NULL, $type = 'page')
     {
         if ($replace===NULL) $replace = array();
-        $content = self::get($seotitle, $type);
+        $content = self::get_by_title($seotitle, $type);
         if ($content->loaded())
         {
-            $user = Auth::instance()->get_user();
-
-            //adding extra replaces
-            $replace+= array('[USER.NAME]' =>  $user->name,
-                             '[USER.EMAIL]' =>  $user->email
-                            );
+            if (Auth::instance()->logged_in())
+            {
+                $user = Auth::instance()->get_user();
+                //adding extra replaces
+                $replace+= array('[USER.NAME]' =>  $user->name,
+                                 '[USER.EMAIL]' =>  $user->email
+                                );
+            }
 
             return str_replace(array_keys($replace), array_values($replace), $content->description);
         }
@@ -224,6 +238,57 @@ class Model_Content extends ORM {
         }   
 
         return $return;
+    }
+
+
+    public static function copy($from_locale,$to_locale,$type)
+    {
+        //get the contents for type locale
+        $contents = self::get_contents($type,$from_locale);
+        
+        $i = 0;
+
+        foreach ($contents as $content) {
+
+            $to_locale_content = new self();
+            
+            $to_locale_content = $to_locale_content->where('seotitle','=', $content->seotitle)
+                ->where('locale','=', $to_locale)
+                ->where('type','=', $type)
+                ->limit(1)->cached()->find();
+
+            if ( ! $to_locale_content->loaded())
+            {
+                $to_locale_content = new self();
+                $to_locale_content->locale      = $to_locale;
+                $to_locale_content->order       = $content->order;
+                $to_locale_content->title       = $content->title;
+                $to_locale_content->seotitle    = $content->seotitle;
+                $to_locale_content->description = $content->description;
+                $to_locale_content->from_email  = $content->from_email;
+                $to_locale_content->created     = $content->created;
+                $to_locale_content->type        = $content->type;
+                $to_locale_content->status      = $content->status;
+
+                try 
+                {
+                    $to_locale_content->save();
+                    $i++;
+                } 
+                catch (Exception $e) 
+                {
+                    Alert::set(Alert::ERROR, $e->getMessage());
+                }
+            }
+        }
+
+        Core::delete_cache();
+
+        if ($i > 0)
+            return TRUE;
+
+        return FALSE;
+
     }
 
     protected $_table_columns =  

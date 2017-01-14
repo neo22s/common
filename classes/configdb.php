@@ -56,7 +56,7 @@ class ConfigDB extends Config_Database {
     private function load_config()
     {
         //we don't read the config cache in development
-        self::$data = (Kohana::$environment===Kohana::DEVELOPMENT)? NULL:Cache::instance()->get('config_db');
+        self::$data = (Kohana::$environment===Kohana::DEVELOPMENT)? NULL:Core::cache('config_db');
         
         //only load if empty
         if(self::$data === NULL)
@@ -76,7 +76,7 @@ class ConfigDB extends Config_Database {
             }
            
             //caching all the results
-            Cache::instance()->set('config_db', self::$data, 60*60*24);
+            Core::cache('config_db', self::$data, 60*60*24);
             
             return TRUE;
         }
@@ -96,7 +96,7 @@ class ConfigDB extends Config_Database {
     public function reload_config()
     {
         // Clears cached data
-        Cache::instance()->delete('config_db');  
+        Core::cache('config_db',NULL,0);  
         //load config
         return $this->load_config();
     }

@@ -6,6 +6,9 @@ class Controller_Forum extends Controller {
 
     public function __construct($request, $response)
     {
+        if (core::config('general.forums') != 1)
+            $this->redirect(Route::url('default'));
+        
         parent::__construct($request, $response);
         Breadcrumbs::add(Breadcrumb::factory()->set_title(__('Home'))->set_url(Route::url('default')));
         Breadcrumbs::add(Breadcrumb::factory()->set_title(__('Forums'))->set_url(Route::url('forum-home')));
@@ -18,9 +21,13 @@ class Controller_Forum extends Controller {
      */
     public function action_index()
     {
+        //in case performing a search
+        if ( strlen($search = core::get('search'))>=3 )
+            return $this->action_search($search);
+
         //template header
         $this->template->title            = __('Forum');
-        $this->template->meta_description = __('Forum');
+        $this->template->meta_description = core::config('general.site_name').' '.__('community forums.');
         $this->template->styles              = array('css/forums.css' => 'screen');
         $this->template->scripts['footer'][] = 'js/forums.js';
         $forums = Model_Forum::get_forum_count();
@@ -35,6 +42,10 @@ class Controller_Forum extends Controller {
      */
     public function action_list()
     {
+        //in case performing a search
+        if ( strlen($search = core::get('search'))>=3 )
+            return $this->action_search($search);
+
         $this->template->styles              = array('css/forums.css' => 'screen');
         $this->template->scripts['footer'][] = 'js/forums.js';
         $forum = new Model_Forum();
@@ -49,13 +60,13 @@ class Controller_Forum extends Controller {
             Breadcrumbs::add(Breadcrumb::factory()->set_title($forum->name));
                         
             //count all topics
-            $count = DB::select(array(DB::select(DB::expr('COUNT("id_post")')),'count'))
+            $count = DB::select(array(DB::expr('COUNT("id_post")'),'count'))
                         ->from(array('posts', 'p'))
                         ->where('id_post_parent','IS',NULL)
                         ->where('id_forum','=',$forum->id_forum)
                         ->cached()
                         ->execute();
-              
+                        
             $count = array_keys($count->as_array('count'));
        
 
@@ -74,14 +85,14 @@ class Controller_Forum extends Controller {
             $topics =   DB::select('p.*')
                         ->select(array(DB::select(DB::expr('COUNT("id_post")'))
                             ->from(array('posts','pc'))
-                            ->where('pc.id_post_parent','=',DB::expr(core::config('database.default.table_prefix').'p.id_post'))
+                            ->where('pc.id_post_parent','=',DB::expr(Database::instance('default')->table_prefix().'p.id_post'))
                             ->where('pc.id_forum','=',$forum->id_forum)
                             ->where('pc.status','=',Model_Post::STATUS_ACTIVE)
                             ->group_by('pc.id_post_parent'), 'count_replies'))
                         ->select(array(DB::select('ps.created')
                             ->from(array('posts','ps'))
-                            ->where('ps.id_post','=',DB::expr(core::config('database.default.table_prefix').'p.id_post'))
-                            ->or_where('ps.id_post_parent','=',DB::expr(core::config('database.default.table_prefix').'p.id_post'))
+                            ->where('ps.id_post','=',DB::expr(Database::instance('default')->table_prefix().'p.id_post'))
+                            ->or_where('ps.id_post_parent','=',DB::expr(Database::instance('default')->table_prefix().'p.id_post'))
                             ->where('ps.id_forum','=',$forum->id_forum)
                             ->where('ps.status','=',Model_Post::STATUS_ACTIVE)
                             ->order_by('ps.created','DESC')
@@ -89,6 +100,7 @@ class Controller_Forum extends Controller {
                         ->from(array('posts', 'p'))
                         ->where('id_post_parent','IS',NULL)
                         ->where('id_forum','=',$forum->id_forum)
+                        ->where('status','=',Model_Post::STATUS_ACTIVE)
                         ->order_by('last_message','DESC')
                         ->limit($pagination->items_per_page)
                         ->offset($pagination->offset)
@@ -126,7 +138,7 @@ class Controller_Forum extends Controller {
 
         if(count($forums) == 0)
         {
-        	if(Auth::instance()->logged_in() AND Auth::instance()->get_user()->id_role == Model_Role::ROLE_ADMIN)
+        	if(Auth::instance()->logged_in() AND Auth::instance()->get_user()->is_admin())
         	{
         		Alert::set(Alert::INFO, __('Please, first create some Forums.'));
         		$this->redirect(Route::url('oc-panel',array('controller'=>'forum','action'=>'index')));
@@ -134,7 +146,7 @@ class Controller_Forum extends Controller {
 			else
 			{
 				Alert::set(Alert::INFO, __('New Topic is not available as a feature.'));
-				$this->redirect('default');
+				$this->redirect(Route::url('default'));
 			}
         }
 
@@ -156,6 +168,10 @@ class Controller_Forum extends Controller {
                                                     ->rule('title', 'min_length', array(':value', 5))
                                                     ->rule('id_forum', 'numeric');
 
+                    // Optional banned words validation
+                    if (core::config('advertisement.validate_banned_words'))
+                        $validation = $validation->rule('title', 'no_banned_words');
+                
                     if ($validation->check())
                     {
                         $topic = new Model_Post();
@@ -168,7 +184,14 @@ class Controller_Forum extends Controller {
                         $topic->ip_address   = ip2long(Request::$client_ip);
                         $topic->save();
 
-                        $this->redirect(Route::url('forum-topic',array('forum'=>$topic->forum->seoname,'seotitle'=>$topic->seotitle)));
+                        $forum_url = Route::url('forum-topic',array('forum'=>$topic->forum->seoname,'seotitle'=>$topic->seotitle));
+
+                        if( core::config('email.new_ad_notify') == TRUE )
+                        {
+                            Email::content(core::config('email.notify_email'), '', NULL, NULL, 'new-forum-answer', array('[FORUM.LINK]' => $forum_url));
+                        }
+
+                        $this->redirect($forum_url);
                     }
                     else
                     {
@@ -177,7 +200,7 @@ class Controller_Forum extends Controller {
                 }
                 else
                 {
-                    Alert::set(Alert::SUCCESS, __('This email has been considered as spam! We are sorry but we can not send this email.'));
+                    Alert::set(Alert::WARNING, __('This email has been considered as spam! We are sorry but we can not send this email.'));
                 }
             }
             else
@@ -190,8 +213,8 @@ class Controller_Forum extends Controller {
         $this->template->meta_description = $this->template->title;
         Breadcrumbs::add(Breadcrumb::factory()->set_title($this->template->title));
 
-        $this->template->styles              = array('css/jquery.sceditor.min.css' => 'screen');
-        $this->template->scripts['footer']   = array('js/jquery.sceditor.min.js?v=144','js/forum-new.js');
+        $this->template->styles              = array('css/jquery.sceditor.default.theme.min.css' => 'screen');
+        $this->template->scripts['footer']   = array('js/jquery.sceditor.bbcode.min.js','js/forum-new.js');
         
         $this->template->bind('content', $content);
         $this->template->content = View::factory('pages/forum/new',array('forums'=>$forums));
@@ -226,11 +249,11 @@ class Controller_Forum extends Controller {
             Breadcrumbs::add(Breadcrumb::factory()->set_title($topic->title));
 
             $this->template->title            = $topic->title.' - '.$forum->name.' - '.__('Forum');
-            $this->template->meta_description = $topic->description;
+            $this->template->meta_description = $topic->title. ' '.__('in').' '.core::config('general.site_name').' '.__('forums');
 
             //getting all the topic replies, pagination
             $replies = new Model_Post();
-            $replies = $replies->where('id_post_parent','=',$topic->id_post);
+            $replies = $replies->where('id_post_parent','=',$topic->id_post)->where('status','=',Model_Post::STATUS_ACTIVE);
             $replies_count = clone $replies;
 
             $pagination = Pagination::factory(array(
@@ -297,8 +320,8 @@ class Controller_Forum extends Controller {
         //if loged in add styles and check for post
         if (Auth::instance()->logged_in())
         {
-            $this->template->styles              = array('css/jquery.sceditor.min.css' => 'screen');
-            $this->template->scripts['footer']   = array('js/jquery.sceditor.min.js?v=144','js/forum-new.js');
+            $this->template->styles              = array('css/jquery.sceditor.default.theme.min.css' => 'screen');
+            $this->template->scripts['footer']   = array('js/jquery.sceditor.bbcode.min.js','js/forum-new.js');
 
             $errors = NULL;
             if($this->request->post()) //message submition  
@@ -321,15 +344,18 @@ class Controller_Forum extends Controller {
                             $reply->id_user  =  $user->id_user;
                             $reply->id_forum = $forum->id_forum;
                             $reply->id_post_parent = $topic->id_post;
-                            $reply->title    = substr(core::post('description'),0,145);
+                            $reply->title    = mb_substr(core::post('description'),0,145);
                             $reply->seotitle = $reply->gen_seotitle($reply->title);
                             $reply->description    = Text::banned_words(core::post('description'));
                             $reply->status   = Model_Post::STATUS_ACTIVE;
                             $reply->ip_address   = ip2long(Request::$client_ip);
                             $reply->save();
-                            unset($_POST['description']);
+                            //set empty since they already replied
+                            Request::current()->post('description','');
                             Alert::set(Alert::SUCCESS, __('Reply added, thanks!'));
                             
+                            //notification to the participants
+                            $topic->notify_repliers();
                         }
                         else
                         {
@@ -349,6 +375,48 @@ class Controller_Forum extends Controller {
             return $errors;
 
         }
+    }
+    
+    public function action_search($search = NULL)
+    {
+        //template header
+        $this->template->title            = __('Forum Search');
+    
+        $this->template->styles = array('css/forum.css' => 'screen');
+    
+    
+        $this->template->bind('content', $content);
+    
+        $topics =  new Model_Topic();
+        $topics->where('status','=',Model_Post::STATUS_ACTIVE)
+                ->where('id_forum','IS NOT',NULL)
+                ->where_open()
+                ->where('title','like','%'.$search.'%')->or_where('description','like','%'.$search.'%')
+                ->where_close();
+    
+    
+        $pagination = Pagination::factory(array(
+                    'view'           => 'pagination',
+                    'total_items'    => $topics->count_all(),
+                    'items_per_page' => self::$items_per_page,
+        ))->route_params(array(
+                    'controller' => $this->request->controller(),
+                    'action'     => $this->request->action(),
+        ));
+    
+        $pagination->title($this->template->title);
+    
+        $topics = $topics->order_by('created','desc')
+                        ->limit($pagination->items_per_page)
+                        ->offset($pagination->offset)
+                        ->find_all();
+    
+        $pagination = $pagination->render(); 
+    
+    
+        
+        $this->template->content = View::factory('pages/forum/search',array('topics'=>$topics,'pagination'=>$pagination));
+        
     }
 
 } // End Forum
